@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地震報告顯示器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: "Inter", sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 1rem;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border: 1px solid #d1d5db; /* gray-300 */
+        }
+        .report-section {
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background-color: #fdfdfd;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e5e7eb; /* gray-200 */
+            background-color: #f9fafb; /* gray-50 */
+        }
+        .report-item {
+            background-color: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            background-color: #ffffff; /* 更亮的背景 */
+            border: 1px solid #cbd5e1; /* slate-300 */
+            cursor: pointer; /* Indicate it's clickable for expanding details */
+            overflow: hidden; /* Hide overflow content for smooth expansion */
+        }
+        .report-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+        }
+        .report-header {
+            font-size: 1.125rem; /* text-lg */
+            font-weight: 600; /* semi-bold */
+            color: #2c3e50;
+            display: flex; /* To align items horizontally */
+            align-items: center;
+        }
+        .report-detail {
+            font-size: 0.95rem; /* text-base minus a bit */
+            color: #555;
+        }
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            font-size: 1.25rem;
+            color: #666;
+        }
+        .error {
+            text-align: center;
+            padding: 2rem;
+            font-size: 1.25rem;
+            color: #e74c3c;
+        }
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px; /* full rounded */
+            font-size: 0.875rem; /* text-sm */
+            font-weight: 500; /* medium */
+            margin-right: 0.5rem;
+        }
+        .badge-significant {
+            background-color: #ef4444; /* red-500 */
+            color: #ffffff;
+        }
+        .badge-minor {
+            background-color: #3b82f6; /* blue-500 */
+            color: #ffffff;
+        }
+        .badge-new {
+            background-color: #10b981; /* emerald-500 */
+            color: #ffffff;
+            margin-left: 0.5rem;
+        }
+
+        /* Styles for expandable detail */
+        .report-item-details {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+            padding-top: 0;
+        }
+        .report-item-details.expanded {
+            max-height: 500px; /* Adjust as needed for content height */
+            padding-top: 1rem;
+            border-top: 1px solid #eee;
+            margin-top: 0.5rem;
+        }
+        .report-item-details ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .report-item-details li {
+            margin-bottom: 0.5rem;
+            background-color: #f2f7ff;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .report-item-details li strong {
+            color: #0d6efd;
+        }
+        .disclaimer-text {
+            font-size: 0.85rem;
+            color: #555;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px dashed #ddd;
+            white-space: pre-wrap; /* Preserve line breaks */
+            text-align: left; /* Ensure it's left-aligned */
+        }
+
+        /* Speaker button style (No longer used but kept for context) */
+        .speaker-button {
+            display: none;
+        }
+
+        /* Global Disclaimer Modal styles */
+        .global-disclaimer-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000; /* Higher than other modals/elements */
+            animation: fadeInOverlay 0.3s ease-out;
+        }
+        .global-disclaimer-content {
+            background-color: #ffffff;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
+            max-width: 450px;
+            width: 90%;
+            position: relative;
+            text-align: center;
+            animation: fadeIn 0.3s ease-out;
+        }
+        .global-disclaimer-content h3 {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #d97706; /* Amber-600 for attention */
+            margin-bottom: 1rem;
+        }
+        .global-disclaimer-content p {
+            font-size: 1rem;
+            color: #333;
+            line-height: 1.5;
+            margin-bottom: 1.5rem;
+            white-space: pre-wrap; /* Preserve line breaks from user input */
+            text-align: left; /* Changed from center to left */
+            max-width: 380px; /* Added max-width to control line length */
+            margin: 0 auto 1.5rem auto; /* Added margin auto to center the paragraph block */
+        }
+        .global-disclaimer-close-button {
+            background-color: #3b82f6; /* blue-500 */
+            color: #ffffff;
+            padding: 0.75rem 2rem;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
+        }
+        .global-disclaimer-close-button:hover {
+            background-color: #2563eb; /* blue-600 */
+            transform: translateY(-1px);
+        }
+        .global-disclaimer-close-button:active {
+            transform: translateY(0);
+        }
+
+        @keyframes fadeInOverlay {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="p-4">
+    <div class="container">
+        <h1 class="text-3xl font-bold text-center mb-6 text-gray-800">地震報告顯示器</h1>
+
+        <!-- Audio Settings Section is completely removed as per user request -->
+        
+        <div class="report-section">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-700">所有地震報告</h2>
+            <div id="allEarthquakes" class="space-y-4">
+                <p class="loading">載入地震報告中...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Disclaimer Modal (appears on page load) -->
+    <div id="globalDisclaimerModal" class="global-disclaimer-overlay hidden">
+        <div class="global-disclaimer-content">
+            <h3>重要聲明</h3>
+            <p>
+此地震報告資料來自中央氣象署開放資料平台，僅供參考與觀察查閱用途。<br>
+實際地震資訊請務必以中央氣象署官方發布為準，本頁面不具法律效力。<br>
+地震報告會每10秒自動更新檢查，若有異常，請盡快利用任何方式通知我們。<br>
+編寫製作者:小秋敬上。</p>
+            <button id="closeDisclaimerButton" class="global-disclaimer-close-button">我知道了</button>
+        </div>
+    </div>
+
+    <script type="module">
+        // Firebase SDK Imports
+        // Corrected Firebase SDK import URLs - removed Markdown link formatting
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // API Endpoints from Central Weather Administration (CWA) Open Data Platform
+        const CWA_API_KEY = 'CWA-DA27CC49-2356-447C-BDB3-D5AA4071E24B'; // 用戶提供的API金鑰
+
+        const SIGNIFICANT_EARTHQUAKE_API = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/E-A0015-001?Authorization=${CWA_API_KEY}`;
+        const MINOR_EARTHQUAKE_API = `https://opendata.cwa.gov.tw/api/v1/rest/datastore/E-A0016-001?Authorization=${CWA_API_KEY}`;
+
+        // Firebase Initialization
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        let app, db, auth;
+        let userId = null; // To store anonymous user ID for Firestore operations
+
+        // Retrieve app ID from global variable or use a default
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // Firestore document path for the global last announced earthquake ID, using the specified public data path
+        const LAST_ANNOUNCED_DOC_PATH = `artifacts/${appId}/public/data/earthquake_status/last_announced_earthquake`;
+
+        // Flag to ensure initial data fetch (and interval setup) happens only once
+        let initialDataFetchTriggered = false;
+
+        // Store all fetched earthquakes to prevent duplicates and maintain order
+        let allCombinedEarthquakes = [];
+        // Use a Set to store the unique IDs of currently expanded earthquake report
+        let expandedEarthquakeIds = new Set();
+        
+        // This will be fetched from Firestore
+        let lastAnnouncedEarthquakeUniqueIdFromFirestore = null; 
+
+        // Removed Speech Synthesis variables: voices, selectedVoice, speechRate, speechPitch, currentUtterance
+
+        // --- Core Functions: Defined at the top for proper module scope definition order ---
+
+        // Function to fetch earthquake data from a given API endpoint and mark its type
+        async function fetchEarthquakeDataByType(url, type) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP 錯誤! 狀態碼: ${response.status}, 訊息: ${errorText}`);
+                }
+                const data = await response.json();
+                
+                // Corrected 'Earthuake' typo to 'Earthquake'
+                if (data.success === 'true' && data.records && data.records.Earthquake) {
+                    // Add a 'type' property to each earthquake object
+                    return data.records.Earthquake.map(eq => ({ ...eq, type: type }));
+                } else {
+                    console.warn(`無法獲取 ${type} 地震資料或資料格式不正確:`, data);
+                    return [];
+                }
+            } catch (error) {
+                console.error(`Fetch ${type} 錯誤:`, error);
+                return [];
+            }
+        }
+
+        // Function to display earthquake data
+        function displayEarthquakes(earthquakes, targetElement) {
+            targetElement.innerHTML = ''; // 清除先前的內容，因為我們會重新渲染整個排序後的列表
+
+            if (earthquakes.length === 0) {
+                targetElement.innerHTML = '<p class="text-gray-600">目前沒有相關地震報告。</p>';
+                return;
+            }
+
+            const currentTime = new Date(); // Get current time once for all comparisons
+
+            earthquakes.forEach(eq => {
+                const eqInfo = eq.EarthquakeInfo;
+                if (!eqInfo) {
+                    console.warn('由於缺少EarthquakeInfo，跳過地震記錄:', eq);
+                    return;
+                }
+
+                const eqMagnitude = eqInfo.EarthquakeMagnitude?.MagnitudeValue ?? 'N/A';
+                const eqOriginTime = eqInfo.OriginTime ?
+                    new Date(eqInfo.OriginTime) : null; // Keep as Date object for comparison
+
+                const formattedOriginTime = eqOriginTime ?
+                    eqOriginTime.toLocaleString('zh-TW', {
+                        year: 'numeric', month: 'numeric', day: 'numeric',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit',
+                        hour12: false
+                    }) : 'N/A';
+                
+                const eqDepth = eqInfo.FocalDepth ?? 'N/A';
+                const eqLocation = eqInfo.Epicenter?.Location ?? 'N/A';
+
+                // 根據我們自己添加的 'type' 屬性來決定標籤
+                let badgeClass = '';
+                let badgeText = '';
+                if (eq.type === 'significant') {
+                    badgeClass = 'badge-significant';
+                    badgeText = '顯著有感';
+                } else if (eq.type === 'minor') {
+                    badgeClass = 'badge-minor';
+                    badgeText = '小區域有感';
+                }
+
+                // Check if the earthquake happened within the last hour
+                let newBadgeHtml = '';
+                if (eqOriginTime) {
+                    const timeDifference = currentTime.getTime() - eqOriginTime.getTime(); // Difference in milliseconds
+                    const oneHourInMs = 60 * 60 * 1000; // 1 hour in milliseconds
+                    if (timeDifference <= oneHourInMs && timeDifference >= 0) { // Ensure it's not a future event
+                        newBadgeHtml = `<span class="badge badge-new">最新</span>`;
+                    }
+                }
+
+                const reportItem = document.createElement('div');
+                reportItem.className = 'report-item';
+                // Store a unique ID on the element for later retrieval of its expanded state
+                const earthquakeUniqueId = `${eq.EarthquakeNo}-${eq.EarthquakeInfo?.OriginTime}`;
+                reportItem.dataset.earthquakeId = earthquakeUniqueId;
+
+
+                // Build the main report content - Speaker button removed
+                let reportHtml = `
+                    <div class="report-header flex items-center">
+                        <span class="badge ${badgeClass}">${badgeText}</span>
+                        ${newBadgeHtml}
+                        <span>規模 ${eqMagnitude}</span>
+                    </div>
+                    <div class="report-detail">時間: ${formattedOriginTime} (UTC+8)</div>
+                    <div class="report-detail">震源深度: ${eqDepth} 公里</div>
+                    <div class="report-detail">地點: ${eqLocation}</div>
+                `;
+
+                // Build the expandable details section
+                let detailHtml = '<div class="report-item-details">';
+                detailHtml += '<ul>';
+                const intensityData = eq.Intensity?.ShakingArea;
+                if (intensityData && intensityData.length > 0) {
+                    detailHtml += '<li class="modal-intensity-item font-semibold text-gray-700">受影響地區與震度：</li>';
+                    intensityData.forEach(area => {
+                        detailHtml += `
+                            <li class="modal-intensity-item">
+                                <span>${area.CountyName ?? area.AreaDesc ?? '未知地區'}</span>
+                                <strong>震度 ${area.AreaIntensity ?? 'N/A'}</strong>
+                            </li>
+                        `;
+                    });
+                } else {
+                    detailHtml += `<li class="modal-intensity-item text-gray-600">無詳細震度資訊。</li>`;
+                }
+                detailHtml += '</ul>'; // Close ul tag
+
+                // Add the disclaimer here - full text as provided by user
+                detailHtml += `
+                    <div class="disclaimer-text">
+此地震報告資料來自中央氣象署開放資料平台，僅供參考與觀察查閱用途。<br>
+實際地震資訊請務必以中央氣象署官方發布為準，本頁面不具法律效力。<br>
+地震報告會每10秒自動更新檢查，若有異常，請盡快利用任何方式通知我們。<br>
+編寫製作者:小秋敬上。</div>
+                `;
+
+                detailHtml += '</div>'; // Close report-item-details tag
+
+                reportItem.innerHTML = reportHtml + detailHtml;
+
+                // Store the full earthquake data as a data attribute (JSON string)
+                reportItem.dataset.earthquakeData = JSON.stringify(eq);
+
+                // Add click listener to toggle details visibility for the main report item
+                reportItem.onclick = (event) => {
+                    const detailsElement = reportItem.querySelector('.report-item-details');
+                    detailsElement.classList.toggle('expanded');
+                    if (detailsElement.classList.contains('expanded')) {
+                        expandedEarthquakeIds.add(earthquakeUniqueId);
+                    } else {
+                        expandedEarthquakeIds.delete(earthquakeUniqueId);
+                    }
+                };
+                
+                targetElement.appendChild(reportItem);
+
+                // After appending, check if it should be expanded based on previous state
+                const detailsElement = reportItem.querySelector('.report-item-details');
+                if (detailsElement && expandedEarthquakeIds.has(earthquakeUniqueId)) {
+                    detailsElement.classList.add('expanded');
+                }
+            });
+        }
+
+        // Removed Speech Synthesis Functionality: readEarthquakeReport function
+
+        // Function to send a message to the Google Chat Webhook (Removed functionality)
+        // This function is kept as a placeholder to avoid breaking existing calls but it does nothing.
+        async function sendWebhookMessage(earthquakeData) {
+            console.log('Webhook 功能已移除，不發送訊息。');
+            // This function intentionally does nothing as per user request.
+        }
+
+
+        // Function to fetch combined earthquake data (main logic for fetching and processing)
+        async function fetchCombinedEarthquakeData() {
+            const targetElement = document.getElementById('allEarthquakes');
+            if (!targetElement) {
+                console.error(`無法找到ID為 allEarthquakes 的元素。`);
+                return;
+            }
+
+            // Before clearing and re-rendering, save the expanded states
+            const currentReportItems = targetElement.querySelectorAll('.report-item');
+            expandedEarthquakeIds.clear(); // Clear previous set
+            currentReportItems.forEach(item => {
+                const detailsElement = item.querySelector('.report-item-details');
+                if (detailsElement && detailsElement.classList.contains('expanded')) {
+                    const earthquakeUniqueId = item.dataset.earthquakeId;
+                    if (earthquakeUniqueId) {
+                        expandedEarthquakeIds.add(earthquakeUniqueId);
+                    }
+                }
+            });
+
+
+            // Show loading message only on initial load or if there was an error previously
+            if (targetElement.innerHTML === '' || targetElement.querySelector('.error')) {
+                 targetElement.innerHTML = '<p class="loading">載入中...</p>';
+            }
+
+            console.log(`正在獲取顯著有感與小區域有感地震資料...`);
+
+            try {
+                // Fetch significant earthquakes and mark them
+                const significantEarthquakes = await fetchEarthquakeDataByType(SIGNIFICANT_EARTHQUAKE_API, 'significant');
+                console.log('顯著有感地震資料 (已標記):', significantEarthquakes);
+
+                // Fetch minor earthquakes and mark them
+                const minorEarthquakes = await fetchEarthquakeDataByType(MINOR_EARTHQUAKE_API, 'minor');
+                console.log('小區域有感地震資料 (已標記):', minorEarthquakes);
+
+                let combinedNewEarthquakes = [...significantEarthquakes, ...minorEarthquakes];
+
+                // Add only new unique earthquakes to the list
+                combinedNewEarthquakes.forEach(newEq => {
+                    // Using EarthquakeNo and OriginTime for uniqueness
+                    const earthquakeUniqueId = `${newEq.EarthquakeNo}-${newEq.EarthquakeInfo?.OriginTime}`;
+                    const exists = allCombinedEarthquakes.some(existingEq => { 
+                        const existingUniqueId = `${existingEq.EarthquakeNo}-${existingEq.EarthquakeInfo?.OriginTime}`;
+                        return existingUniqueId === earthquakeUniqueId;
+                    });
+                    
+                    if (!exists) {
+                        allCombinedEarthquakes.push(newEq);
+                    }
+                });
+
+                // Sort the combined list by OriginTime in descending order (newest first)
+                allCombinedEarthquakes.sort((a, b) => {
+                    const timeA = new Date(a.EarthquakeInfo?.OriginTime || 0);
+                    const timeB = new Date(b.EarthquakeInfo?.OriginTime || 0);
+                    return timeB.getTime() - timeA.getTime(); // Descending order
+                });
+                
+                console.log(`更新後所有地震報告總共 ${allCombinedEarthquakes.length} 筆資料。`);
+
+                // Display all (new and old) sorted earthquakes
+                displayEarthquakes(allCombinedEarthquakes, targetElement);
+
+                // --- Automatic Announcement Logic (Voice and Webhook removed) ---
+                if (allCombinedEarthquakes.length > 0) {
+                    const latestEarthquake = allCombinedEarthquakes[0];
+                    const latestEarthquakeUniqueId = `${latestEarthquake.EarthquakeNo}-${latestEarthquake.EarthquakeInfo?.OriginTime}`;
+
+                    // This part is kept for logging Firestore status, but it no longer triggers voice/webhook
+                    if (db && auth.currentUser) {
+                        const docRef = doc(db, LAST_ANNOUNCED_DOC_PATH);
+                        const docSnap = await getDoc(docRef);
+                        if (docSnap.exists()) {
+                            lastAnnouncedEarthquakeUniqueIdFromFirestore = docSnap.data().uniqueId;
+                            console.log('Firestore last announced ID:', lastAnnouncedEarthquakeUniqueIdFromFirestore);
+                        } else {
+                            console.log('No last announced ID found in Firestore.');
+                        }
+                    } else if (firebaseConfig) {
+                        console.log('Firebase not ready or user not authenticated for Firestore read. Deduplication check skipped.');
+                    }
+                    console.log('自動播報功能已移除，不會自動播放語音或發送 Webhook。'); // Log to confirm removal
+                }
+
+            } catch (error) {
+                targetElement.innerHTML = `<p class="error">載入地震資料時發生錯誤: ${error.message}。請確認API金鑰是否正確。</p>`;
+                console.error('Fetch 錯誤: 此錯誤與資料擷取有關', error);
+            }
+        }
+
+
+        // Functions for the new global disclaimer modal - make them globally accessible
+        window.showGlobalDisclaimerModal = function() {
+            const modal = document.getElementById('globalDisclaimerModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+            }
+        }
+
+        window.closeGlobalDisclaimerModal = function() {
+            const modal = document.getElementById('globalDisclaimerModal');
+            if (modal) {
+                modal.classList.add('hidden');
+            }
+        }
+
+        // Removed Speech Synthesis Voice and Settings Management (populateVoiceList, DOMContentLoaded listener)
+
+        // 頁面載入時初始化
+        window.onload = function() {
+            // 首先，顯示全域聲明視窗並綁定關閉按鈕事件
+            showGlobalDisclaimerModal();
+            const closeButton = document.getElementById('closeDisclaimerButton');
+            if (closeButton) {
+                closeButton.addEventListener('click', closeGlobalDisclaimerModal);
+            }
+
+            // Firebase authentication and data fetching logic
+            if (firebaseConfig) {
+                // Initialize Firebase app, db, auth only once
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // onAuthStateChanged will handle the initial fetch and interval setup
+                // as it ensures Firebase is ready.
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        console.log('Firebase user (re)signed in:', userId);
+                    } else {
+                        try {
+                            const credential = await signInAnonymously(auth);
+                            userId = credential.user.uid;
+                            console.log('Firebase anonymous sign-in successful:', userId);
+                        } catch (error) {
+                            console.error('Firebase anonymous sign-in failed:', error);
+                            // If anonymous sign-in fails, log and proceed without Firebase-dependent features
+                        }
+                    }
+
+                    // This block ensures data fetching and interval setup happens ONLY ONCE
+                    // after Firebase authentication state is determined (either signed in or anonymously signed in).
+                    if (!initialDataFetchTriggered) {
+                        console.log('Firebase auth state determined. Performing initial data fetch and setting interval.');
+                        fetchCombinedEarthquakeData(); // Initial fetch
+                        setInterval(() => {
+                            console.log('正在刷新所有地震資料...');
+                            fetchCombinedEarthquakeData();
+                        }, 10000);
+                        initialDataFetchTriggered = true;
+                    }
+                });
+            } else {
+                console.warn('沒有偵測到 Firebase 配置。跨裝置的去重複功能將無法運作。');
+                // If no Firebase config, proceed immediately without waiting for auth
+                fetchCombinedEarthquakeData();
+                setInterval(() => {
+                    console.log('正在刷新所有地震資料...');
+                    fetchCombinedEarthquakeData();
+                }, 10000);
+            }
+        };
+    </script>
+</body>
+</html>
